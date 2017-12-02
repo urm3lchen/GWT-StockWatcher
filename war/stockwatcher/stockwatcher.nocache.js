@@ -375,11 +375,11 @@ function stockwatcher(){
     }
     var strongName;
     try {
-      unflattenKeylistIntoAnswers(['ie9'], '0C0E0FDAC382B25E9025E8C853D14C06');
-      unflattenKeylistIntoAnswers(['gecko1_8'], '4F9D93F4695FC2C4299C712716D008BB');
-      unflattenKeylistIntoAnswers(['ie8'], '604EB1430164CD693BA39A47B1B3DC38');
-      unflattenKeylistIntoAnswers(['safari'], 'A8508EFD5A2EC383246A8BA996988ACD');
-      unflattenKeylistIntoAnswers(['ie10'], 'F4659C33296578D3345EC68DC42B7E16');
+      unflattenKeylistIntoAnswers(['ie8'], '051FB0D362555ACDAACA2357C59C8317');
+      unflattenKeylistIntoAnswers(['ie10'], '24C60D71490C4D9C1D17713C4749CA1F');
+      unflattenKeylistIntoAnswers(['ie9'], 'A7A0C9EDA35225438FABAC151F06FFA5');
+      unflattenKeylistIntoAnswers(['gecko1_8'], 'B3F2F29CD23649A9128841ABF2547213');
+      unflattenKeylistIntoAnswers(['safari'], 'DF71C421350CBAFE186AAE0D6F1E60A4');
       strongName = answers[computePropValue('user.agent')];
       var idx = strongName.indexOf(':');
       if (idx != -1) {
