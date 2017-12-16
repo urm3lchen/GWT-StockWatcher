@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Date;
 
 import com.google.gwt.core.client.EntryPoint;
+import com.google.gwt.core.client.GWT;
 import com.google.gwt.event.dom.client.ClickEvent;
 import com.google.gwt.event.dom.client.ClickHandler;
 import com.google.gwt.event.dom.client.KeyCodes;
@@ -11,9 +12,9 @@ import com.google.gwt.event.dom.client.KeyDownEvent;
 import com.google.gwt.event.dom.client.KeyDownHandler;
 import com.google.gwt.i18n.client.DateTimeFormat;
 import com.google.gwt.i18n.client.NumberFormat;
-import com.google.gwt.user.client.Random;
 import com.google.gwt.user.client.Timer;
 import com.google.gwt.user.client.Window;
+import com.google.gwt.user.client.rpc.AsyncCallback;
 import com.google.gwt.user.client.ui.Button;
 import com.google.gwt.user.client.ui.FlexTable;
 import com.google.gwt.user.client.ui.HorizontalPanel;
@@ -32,6 +33,8 @@ public class StockWatcher implements EntryPoint
 	private Button addStockButton = new Button("Add");
 	private Label lastUpdatedLabel = new Label();
 	private ArrayList<String> stocks = new ArrayList<String>();
+	private StockPriceServiceAsync stockPriceSvc = GWT.create(StockPriceService.class);
+	private Label errorMsgLabel = new Label();
 
 	/**
 	 * Entry point method.
@@ -43,11 +46,26 @@ public class StockWatcher implements EntryPoint
 		stocksFlexTable.setText(0, 2, "Change");
 		stocksFlexTable.setText(0, 3, "Remove");
 
+		// Add styles to elements in the stock list table.
+		stocksFlexTable.setCellPadding(6);
+
+		// Add styles to elements in the stock list table.
+		stocksFlexTable.getRowFormatter().addStyleName(0, "watchListHeader");
+		stocksFlexTable.addStyleName("watchList");
+		stocksFlexTable.getCellFormatter().addStyleName(0, 1, "watchListNumericColumn");
+		stocksFlexTable.getCellFormatter().addStyleName(0, 2, "watchListNumericColumn");
+		stocksFlexTable.getCellFormatter().addStyleName(0, 3, "watchListRemoveColumn");
+
 		// Assemble Add Stock panel.
 		addPanel.add(newSymbolTextBox);
 		addPanel.add(addStockButton);
+		addPanel.addStyleName("addPanel");
 
 		// Assemble Main panel.
+		errorMsgLabel.setStyleName("errorMessage");
+		errorMsgLabel.setVisible(false);
+
+		mainPanel.add(errorMsgLabel);
 		mainPanel.add(stocksFlexTable);
 		mainPanel.add(addPanel);
 		mainPanel.add(lastUpdatedLabel);
@@ -96,23 +114,36 @@ public class StockWatcher implements EntryPoint
 	 */
 	private void refreshWatchList()
 	{
-		final double MAX_PRICE = 100.0; // $100.00
-		final double MAX_PRICE_CHANGE = 0.02; // +/- 2%
-
-		StockPrice[] prices = new StockPrice[stocks.size()];
-		for (int i = 0; i < stocks.size(); i++)
+		// Initialize the service proxy.
+		if (stockPriceSvc == null)
 		{
-			double price = Random.nextDouble() * MAX_PRICE;
-			double change = price * MAX_PRICE_CHANGE * (Random.nextDouble() * 2.0 - 1.0);
-
-			prices[i] = new StockPrice(stocks.get(i), price, change);
+			stockPriceSvc = GWT.create(StockPriceService.class);
 		}
 
-		updateTable(prices);
+		// Set up the callback object.
+		AsyncCallback<StockPrice[]> callback = new AsyncCallback<StockPrice[]>()
+		{
+			public void onFailure(Throwable caught)
+			{
+				// If the stock code is in the list of delisted codes, display an error message.
+				String details = caught.getMessage();
+				if (caught instanceof DelistedException)
+				{
+					details = "Company '" + ((DelistedException) caught).getSymbol() + "' was delisted";
+				}
 
-		// Display timestamp showing last refresh.
-		DateTimeFormat dateFormat = DateTimeFormat.getFormat(DateTimeFormat.PredefinedFormat.DATE_TIME_MEDIUM);
-		lastUpdatedLabel.setText("Last update : " + dateFormat.format(new Date()));
+				errorMsgLabel.setText("Error: " + details);
+				errorMsgLabel.setVisible(true);
+			}
+
+			public void onSuccess(StockPrice[] result)
+			{
+				updateTable(result);
+			}
+		};
+
+		// Make the call to the stock price service.
+		stockPriceSvc.getPrices(stocks.toArray(new String[0]), callback);
 	}
 
 	/**
@@ -127,6 +158,12 @@ public class StockWatcher implements EntryPoint
 		{
 			updateTable(prices[i]);
 		}
+
+		// Display timestamp showing last refresh.
+		DateTimeFormat dateFormat = DateTimeFormat.getFormat(DateTimeFormat.PredefinedFormat.DATE_TIME_MEDIUM);
+		lastUpdatedLabel.setText("Last update : " + dateFormat.format(new Date()));
+		// Clear any errors.
+		errorMsgLabel.setVisible(false);
 	}
 
 	/**
@@ -153,7 +190,20 @@ public class StockWatcher implements EntryPoint
 
 		// Populate the Price and Change fields with new data.
 		stocksFlexTable.setText(row, 1, priceText);
-		stocksFlexTable.setText(row, 2, changeText + " (" + changePercentText + "%)");
+		Label changeWidget = (Label) stocksFlexTable.getWidget(row, 2);
+		changeWidget.setText(changeText + " (" + changePercentText + "%)");
+
+		// Change the color of text in the Change field based on its value.
+		String changeStyleName = "noChange";
+		if (price.getChangePercent() < -0.1f)
+		{
+			changeStyleName = "negativeChange";
+		} else if (price.getChangePercent() > 0.1f)
+		{
+			changeStyleName = "positiveChange";
+		}
+
+		changeWidget.setStyleName(changeStyleName);
 	}
 
 	protected void addStock()
@@ -179,9 +229,14 @@ public class StockWatcher implements EntryPoint
 		int row = stocksFlexTable.getRowCount();
 		stocks.add(symbol);
 		stocksFlexTable.setText(row, 0, symbol);
+		stocksFlexTable.setWidget(row, 2, new Label());
+		stocksFlexTable.getCellFormatter().addStyleName(row, 1, "watchListNumericColumn");
+		stocksFlexTable.getCellFormatter().addStyleName(row, 2, "watchListNumericColumn");
+		stocksFlexTable.getCellFormatter().addStyleName(row, 3, "watchListRemoveColumn");
 
 		// Add a button to remove this stock from the table.
 		Button removeStockButton = new Button("x");
+		removeStockButton.addStyleDependentName("remove");
 		removeStockButton.addClickHandler(new ClickHandler()
 		{
 			public void onClick(ClickEvent event)
